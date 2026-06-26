@@ -30,21 +30,21 @@ async def extractionCall(image_path):
     random.shuffle(keys_to_try)
 
     # ── Phase 1: Extract claim from screenshot ───────────────────────────────
-    #calling groq or gemini vision
+    #calling openrouter or gemini vision
     print("🔍 Phase 1: Extracting claim from screenshot...")
-    raw_extraction, err = await aiCalls.call_groq_vision(extractionPrompt.EXTRACTION_PROMPT, img_bytes)
+    raw_extraction, err = await aiCalls.call_openrouter_vision(extractionPrompt.EXTRACTION_PROMPT, img_bytes)
     
     extraction = None
     if not err:
         try:
             extraction = json.loads(raw_extraction)
         except json.JSONDecodeError:
-            print("⚠️ Groq returned invalid JSON, falling back to Gemini...")
+            print("⚠️ OpenRouter returned invalid JSON, falling back to Gemini...")
             err = "Invalid JSON returned"
 
-    #if groq fails, try gemini vision but gemini is trash so pray that groq works
+    #if openrouter fails, try gemini vision but gemini is trash so pray that openrouter works
     if err:
-        print(f"⚠️ Groq failed ({err}), trying Gemini vision...")
+        print(f"⚠️ OpenRouter failed ({err}), trying Gemini vision...")
         raw_extraction, err = await aiCalls.call_gemini(extractionPrompt.EXTRACTION_PROMPT, image_part, keys_to_try=keys_to_try)
         if err:
             return f"RealityLens: Extraction failed — {err}"

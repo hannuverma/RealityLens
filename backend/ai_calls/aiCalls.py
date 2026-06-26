@@ -9,38 +9,41 @@ import httpx
 import asyncio
 import base64
 import backend.ai_calls.getKeys as getKeys
+from openai import AsyncOpenAI
 
 
-# function to call groq vision ai
-async def call_groq_vision(prompt, image_bytes, groq_api_keys=getKeys.groq_api_keys, keys_to_try=None):
-    """Groq vision fallback for extraction when Gemini fails."""
-    # check if the groq api key is present
-    if not groq_api_keys:
-        return None, "GROQ_API_KEY is missing."
+# function to call openrouter vision ai
+async def call_openrouter_vision(prompt, image_bytes, openrouter_api_keys=getKeys.openrouter_api_keys, keys_to_try=None):
+    """OpenRouter vision fallback for extraction when Gemini fails."""
+    # check if the openrouter api key is present
+    if not openrouter_api_keys:
+        return None, "OPENROUTER_API_KEY is missing."
         
     if keys_to_try is None:
-        keys_to_try = groq_api_keys[:]
+        keys_to_try = openrouter_api_keys[:]
         random.shuffle(keys_to_try)
         
     # encode image bytes to base64
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-    # only these Groq models support vision
     vision_models = getKeys.vision_models
     
     i = 0
     while i < len(keys_to_try):
         key = keys_to_try[i]
         key_exhausted = False
-        # create a groq client
-        groq_client = AsyncGroq(api_key=key)
+        # create an openai client pointing to openrouter
+        openrouter_client = AsyncOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=key,
+        )
         
         # loop through vision models and try to extract information
         for model in vision_models:
             # try to extract information
             try:
-                print(f"🔍 Extracting with Groq vision {model}...")
-                # send the prompt and image to the groq vision api
-                response = await groq_client.chat.completions.create(
+                print(f"🔍 Extracting with OpenRouter vision {model}...")
+                # send the prompt and image to the openrouter vision api
+                response = await openrouter_client.chat.completions.create(
                     model=model,
                     messages=[
                         {
@@ -75,18 +78,18 @@ async def call_groq_vision(prompt, image_bytes, groq_api_keys=getKeys.groq_api_k
             except Exception as e:
                 err = str(e)
                 if "429" in err or "rate_limit" in err.lower() or "rate limit" in err.lower():
-                    print(f"⚠️ Groq rate limit on {model}, trying next key...")
+                    print(f"⚠️ OpenRouter rate limit on {model}, trying next key...")
                     keys_to_try.pop(i)
                     key_exhausted = True
                     break
                 else:
-                    print(f"⚠️ Groq vision error on {model}: {err}")
+                    print(f"⚠️ OpenRouter vision error on {model}: {err}")
                     continue
         
         if not key_exhausted:
             i += 1
 
-    return None, "All Groq vision models and keys failed."
+    return None, "All OpenRouter vision models and keys failed."
 
 async def call_groq_extraction(prompt, groq_api_keys=getKeys.groq_api_keys, keys_to_try=None):
     """Groq fallback for text extraction."""
