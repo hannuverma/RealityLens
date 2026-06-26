@@ -46,8 +46,9 @@ GEMINI_MODELS = [
 vision_models = [
     
     "openai/gpt-4o-mini",
-    "qwen/qwen3.6-27b",
     "meta-llama/llama-4-scout-17b-16e-instruct",
+    "qwen/qwen3.6-27b",
+    
     
 ]
 #function to get the gemini client 
