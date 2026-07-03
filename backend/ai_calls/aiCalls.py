@@ -277,6 +277,14 @@ async def call_kimi(prompt, image_bytes=None):
     except Exception as e:
         return None, f"Kimi-K2 Connection Error: {str(e)}"
 
+_cloudflare_client = None
+
+def _get_cloudflare_client():
+    global _cloudflare_client
+    if _cloudflare_client is None:
+        _cloudflare_client = httpx.AsyncClient(http2=True, timeout=30.0)
+    return _cloudflare_client
+
 async def call_cloudflare_llama(prompt, image_bytes=None):
     """Cloudflare Workers AI call using @cf/meta-llama/llama-4-scout-17b-16e-instruct.
     Supports both text-only and vision (image) extraction."""
@@ -302,16 +310,16 @@ async def call_cloudflare_llama(prompt, image_bytes=None):
 
     try:
         print("🔍 Extracting with Cloudflare Llama-4 Scout...")
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                url,
-                headers=headers,
-                json={
-                    "messages": [{"role": "user", "content": content}],
-                    "max_tokens": 1500,
-                    "temperature": 0.1,
-                },
-            )
+        client = _get_cloudflare_client()
+        response = await client.post(
+            url,
+            headers=headers,
+            json={
+                "messages": [{"role": "user", "content": content}],
+                "max_tokens": 1500,
+                "temperature": 0.1,
+            },
+        )
 
         res_json = response.json()
         if not res_json.get("success"):
