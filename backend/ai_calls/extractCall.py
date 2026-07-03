@@ -32,26 +32,37 @@ async def extractionCall(image_path):
     # ── Phase 1: Extract claim from screenshot ───────────────────────────────
     #calling openrouter or gemini vision
     print("🔍 Phase 1: Extracting claim from screenshot...")
-    raw_extraction, err = await aiCalls.call_openrouter_vision(extractionPrompt.EXTRACTION_PROMPT, img_bytes)
+    raw_extraction, err = await aiCalls.call_cloudflare_llama(extractionPrompt.EXTRACTION_PROMPT, img_bytes)
     
     extraction = None
     if not err:
         try:
             extraction = json.loads(raw_extraction)
         except json.JSONDecodeError:
-            print("⚠️ OpenRouter returned invalid JSON, falling back to Gemini...")
+            print("⚠️ OpenRouter returned invalid JSON, falling back...")
             err = "Invalid JSON returned"
 
-    #if openrouter fails, try gemini vision but gemini is trash so pray that openrouter works
+    #if openrouter fails, try cloudflare llama-4 scout vision
     if err:
-        print(f"⚠️ OpenRouter failed ({err}), trying Gemini vision...")
+        print(f"⚠️ OpenRouter failed ({err}), trying Cloudflare Llama-4 Scout...")
+        raw_extraction, err = await aiCalls.call_cloudflare_llama(extractionPrompt.EXTRACTION_PROMPT, img_bytes)
+        if not err:
+            try:
+                extraction = json.loads(raw_extraction)
+            except json.JSONDecodeError:
+                print("⚠️ Cloudflare Llama returned invalid JSON, falling back to Gemini...")
+                err = "Invalid JSON returned"
+
+    #if cloudflare llama also fails, try gemini vision as last resort
+    if err:
+        print(f"⚠️ Cloudflare Llama failed ({err}), trying Gemini vision...")
         raw_extraction, err = await aiCalls.call_gemini(extractionPrompt.EXTRACTION_PROMPT, image_part, keys_to_try=keys_to_try)
         if err:
             return f"RealityLens: Extraction failed — {err}"
         try:
             extraction = json.loads(raw_extraction)
         except json.JSONDecodeError:
-            return {"error": "Failed to parse extraction response from both AI models", "raw": raw_extraction}
+            return {"error": "Failed to parse extraction response from all AI models", "raw": raw_extraction}
 
     claim = extraction.get("claim", "")
 
@@ -84,18 +95,30 @@ async def extractionCallText(text: str):
     print("🔍 Phase 1: Extracting claim from text...")
     prompt = f"{extractionPrompt.EXTRACTION_TEXT_PROMPT}\n\nUser Text:\n{text}"
     
-    raw_extraction, err = await aiCalls.call_groq_extraction(prompt)
+    raw_extraction, err = await aiCalls.call_cloudflare_llama(prompt)
     
     extraction = None
     if not err:
         try:
             extraction = json.loads(raw_extraction)
         except json.JSONDecodeError:
-            print("⚠️ Groq returned invalid JSON, falling back to Gemini...")
+            print("⚠️ CLoudflare returned invalid JSON, falling back...")
             err = "Invalid JSON returned"
 
+    #if groq fails, try cloudflare llama-4 scout (text-only)
     if err:
-        print(f"⚠️ Groq text failed ({err}), trying Gemini...")
+        print(f"⚠️ Cloudflare text failed ({err}), trying Groq Llama-4 Scout...")
+        raw_extraction, err = await aiCalls.call_groq_extraction(prompt)
+        if not err:
+            try:
+                extraction = json.loads(raw_extraction)
+            except json.JSONDecodeError:
+                print("⚠️ Cloudflare Llama returned invalid JSON, falling back to Gemini...")
+                err = "Invalid JSON returned"
+
+    #if cloudflare llama also fails, try gemini as last resort
+    if err:
+        print(f"⚠️ Cloudflare Llama failed ({err}), trying Gemini...")
         raw_extraction, err = await aiCalls.call_gemini(prompt, keys_to_try=keys_to_try)
         if err:
             return f"RealityLens: Extraction failed — {err}"
@@ -103,7 +126,7 @@ async def extractionCallText(text: str):
         try:
             extraction = json.loads(raw_extraction)
         except json.JSONDecodeError:
-            return {"error": "Failed to parse extraction response from both AI models", "raw": raw_extraction}
+            return {"error": "Failed to parse extraction response from all AI models", "raw": raw_extraction}
 
     claim = extraction.get("claim", "")
 

@@ -276,6 +276,59 @@ async def call_kimi(prompt, image_bytes=None):
 
     except Exception as e:
         return None, f"Kimi-K2 Connection Error: {str(e)}"
+
+async def call_cloudflare_llama(prompt, image_bytes=None):
+    """Cloudflare Workers AI call using @cf/meta-llama/llama-4-scout-17b-16e-instruct.
+    Supports both text-only and vision (image) extraction."""
+
+    ACCOUNT_ID = os.getenv("ACCOUNT_ID", "").strip()
+    AUTH_TOKEN = os.getenv("CLOUDFLARE_AUTH_TOKEN", "").strip()
+
+    if not ACCOUNT_ID or not AUTH_TOKEN:
+        return None, "ACCOUNT_ID or CLOUDFLARE_AUTH_TOKEN is missing."
+
+    url = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct"
+    headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
+
+    # Construct the content list
+    content = [{"type": "text", "text": prompt}]
+
+    if image_bytes:
+        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+        })
+
+    try:
+        print("🔍 Extracting with Cloudflare Llama-4 Scout...")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                url,
+                headers=headers,
+                json={
+                    "messages": [{"role": "user", "content": content}],
+                    "max_tokens": 1500,
+                    "temperature": 0.1,
+                },
+            )
+
+        res_json = response.json()
+        if not res_json.get("success"):
+            return None, f"Cloudflare Llama Error: {res_json.get('errors')}"
+
+        raw = res_json["result"]["response"].strip()
+
+        # Clean up Markdown formatting if present
+        if raw.startswith("```json"):
+            raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
+        elif raw.startswith("```"):
+            raw = raw.replace("```", "", 2).strip()
+
+        return raw, None
+
+    except Exception as e:
+        return None, f"Cloudflare Llama Connection Error: {str(e)}"
     
 async def call_groq(prompt, groq_api_keys=getKeys.groq_api_keys, keys_to_try=None):
     """Call Groq API with the given prompt. Returns response text or raises."""
