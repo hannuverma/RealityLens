@@ -37,6 +37,11 @@ GROQ_MODELS = [
     "llama-3.1-8b-instant",           # Last resort, very fast
 ]
 
+#groq vision models to try (these support image input)
+GROQ_VISION_MODELS = [
+    "meta-llama/llama-4-scout-17b-16e-instruct",  # Vision-capable, fast on Groq LPU
+]
+
 #gemini models to try
 GEMINI_MODELS = [
     "gemini-2.5-flash",
@@ -45,8 +50,8 @@ GEMINI_MODELS = [
 #vision models to try
 vision_models = [
     
-    "openai/gpt-4o-mini",
     "meta-llama/llama-4-scout-17b-16e-instruct",
+    "openai/gpt-4o-mini",
     "qwen/qwen3.6-27b",
     
     

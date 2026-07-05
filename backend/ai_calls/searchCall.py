@@ -18,21 +18,32 @@ async def searchCall(extraction):
     claim = extraction.get("claim", "")
     print(f"🌐 Phase 2: Searching for — {claim}")
     entities = extraction.get("claim_entities", claim)
-    # Combine claim and entities to ensure critical context isn't lost if the vision model omits it
-    search_query = f"{claim} {entities}" if entities and entities != claim else claim
+    
+    # Use entities as primary query (concise, search-engine-friendly)
+    # Fall back to claim if entities are missing
+    primary_query = entities if entities and entities.strip() else claim
 
     async def do_text_search():
-        #call tavily search or parallel search if tavily fails
+        #run two searches in parallel: one recent news, one unrestricted
+        #this catches both breaking news AND older events that time_range="week" would miss
         try:
-            return await aiCalls.tavily_search(search_query, num_results=5)
+            recent_results, broad_results = await asyncio.gather(
+                aiCalls.tavily_search(primary_query, num_results=5),
+                aiCalls.tavily_search_broad(primary_query, num_results=5),
+            )
+            #deduplicate by URL
+            seen_urls = set()
+            merged = []
+            for r in recent_results + broad_results:
+                url = r.get("url", "")
+                if url not in seen_urls:
+                    seen_urls.add(url)
+                    merged.append(r)
+            return merged
         except Exception as e:
             #if tavily fails, parallel is faster from what i have seen but its unreliable because it gives claims that are not from credible sources and our scoring relies on the quality of sources 
-            if "API key" in str(e):
-                print(f"⚠️ Tavily search failed due to API key issue: {e}")
-                return await aiCalls.parallel_search(search_query)
-            else:
-                print(f"⚠️ Tavily search error: {e}")
-                return await aiCalls.parallel_search(search_query)
+            print(f"⚠️ Tavily search error: {e}")
+            return await aiCalls.parallel_search(primary_query)
 
     async def do_image_search():
         #if there is an embedded image and image description
@@ -56,5 +67,5 @@ async def searchCall(extraction):
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     search_text = f"TODAY'S DATE: {today_str}\n\n" + aiCalls.format_search_results(search_results)
     print(f"📰 Found {len(search_results)} search results")
-
+    print(f"{search_results}")
     return search_text

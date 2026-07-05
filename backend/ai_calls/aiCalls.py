@@ -147,6 +147,73 @@ async def call_groq_extraction(prompt, groq_api_keys=getKeys.groq_api_keys, keys
 
     return None, "All Groq text models and keys failed."
 
+async def call_groq_vision(prompt, image_bytes, groq_api_keys=getKeys.groq_api_keys, keys_to_try=None):
+    """Groq vision call for image extraction using Llama-4-Scout."""
+    if not groq_api_keys:
+        return None, "GROQ_API_KEY is missing."
+
+    if keys_to_try is None:
+        keys_to_try = groq_api_keys[:]
+        random.shuffle(keys_to_try)
+
+    models = getattr(getKeys, "GROQ_VISION_MODELS", ["meta-llama/llama-4-scout-17b-16e-instruct"])
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+    i = 0
+    while i < len(keys_to_try):
+        key = keys_to_try[i]
+        key_exhausted = False
+        groq_client = AsyncGroq(api_key=key)
+
+        for model in models:
+            try:
+                print(f"🔍 Extracting with Groq vision {model}...")
+                response = await groq_client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/jpeg;base64,{image_b64}"
+                                    }
+                                },
+                                {
+                                    "type": "text",
+                                    "text": prompt
+                                }
+                            ]
+                        }
+                    ],
+                    temperature=0.1,
+                    max_tokens=1500,
+                )
+                raw = response.choices[0].message.content.strip()
+                if raw.startswith("```json"):
+                    raw = raw.replace("```json", "", 1).replace("```", "", 1).strip()
+                elif raw.startswith("```"):
+                    raw = raw.replace("```", "", 2).strip()
+
+                return raw, None
+
+            except Exception as e:
+                err = str(e)
+                if "429" in err or "rate limit" in err.lower() or "rate_limit" in err.lower():
+                    print(f"⚠️ Groq rate limit on {model}, trying next key...")
+                    keys_to_try.pop(i)
+                    key_exhausted = True
+                    break
+                else:
+                    print(f"⚠️ Groq vision error on {model}: {err}")
+                    continue
+
+        if not key_exhausted:
+            i += 1
+
+    return None, "All Groq vision models and keys failed."
+
 # function to call gemini ai
 async def call_gemini(prompt, image_part=None, gemini_api_keys=getKeys.gemini_api_keys, keys_to_try=None):
     """Try each key and model until one works. Returns parsed text or raises."""
@@ -448,6 +515,55 @@ async def tavily_search(query, num_results=5, tavily_api_keys=getKeys.tavily_api
                 key_exhausted = True
             else:
                 print(f"⚠️ Tavily search failed: {e}")
+                return []
+        
+        if not key_exhausted:
+            i += 1
+
+    return []
+
+async def tavily_search_broad(query, num_results=5, tavily_api_keys=getKeys.tavily_api_keys, keys_to_try=None):
+    """Tavily search WITHOUT time_range or topic restrictions.
+    Catches older events that the news-focused search would miss."""
+    if not tavily_api_keys:
+        return []
+
+    if keys_to_try is None:
+        keys_to_try = tavily_api_keys[:]
+        random.shuffle(keys_to_try)
+
+    i = 0
+    while i < len(keys_to_try):
+        key = keys_to_try[i]
+        key_exhausted = False
+        try:
+            client = AsyncTavilyClient(api_key=key)
+            response = await client.search(
+                query=query,
+                search_depth="basic",
+                max_results=num_results,
+            )
+
+            results = []
+            for item in response.get("results", []):
+                results.append({
+                    "title": item.get("title", ""),
+                    "url": item.get("url", ""),
+                    "description": item.get("content", ""),
+                    "source": item.get("url", "").split("/")[2] if item.get("url") else "Unknown",
+                    "publish_date": item.get("published_date", ""),
+                })
+
+            return results
+
+        except Exception as e:
+            err = str(e)
+            if "429" in err or "rate limit" in err.lower() or "unauthorized" in err.lower() or "401" in err:
+                print(f"⚠️ Tavily broad key failed: {err}, trying next key...")
+                keys_to_try.pop(i)
+                key_exhausted = True
+            else:
+                print(f"⚠️ Tavily broad search failed: {e}")
                 return []
         
         if not key_exhausted:

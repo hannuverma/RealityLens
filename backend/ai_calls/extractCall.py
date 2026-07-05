@@ -30,21 +30,21 @@ async def extractionCall(image_path):
     random.shuffle(keys_to_try)
 
     # ── Phase 1: Extract claim from screenshot ───────────────────────────────
-    #calling openrouter or gemini vision
+    #calling groq vision first (fastest), then cloudflare, then gemini
     print("🔍 Phase 1: Extracting claim from screenshot...")
-    raw_extraction, err = await aiCalls.call_cloudflare_llama(extractionPrompt.EXTRACTION_PROMPT, img_bytes)
+    raw_extraction, err = await aiCalls.call_groq_vision(extractionPrompt.EXTRACTION_PROMPT, img_bytes)
     
     extraction = None
     if not err:
         try:
             extraction = json.loads(raw_extraction)
         except json.JSONDecodeError:
-            print("⚠️ OpenRouter returned invalid JSON, falling back...")
+            print("⚠️ Groq returned invalid JSON, falling back...")
             err = "Invalid JSON returned"
 
-    #if openrouter fails, try cloudflare llama-4 scout vision
+    #if groq fails, try cloudflare llama-4 scout vision
     if err:
-        print(f"⚠️ OpenRouter failed ({err}), trying Cloudflare Llama-4 Scout...")
+        print(f"⚠️ Groq vision failed ({err}), trying Cloudflare Llama-4 Scout...")
         raw_extraction, err = await aiCalls.call_cloudflare_llama(extractionPrompt.EXTRACTION_PROMPT, img_bytes)
         if not err:
             try:
